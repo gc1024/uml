@@ -1,0 +1,179 @@
+@startuml
+!include <archimate/Archimate>
+
+title 生产环境 CICD 自动化部署流程
+
+skinparam backgroundColor #FEFEFE
+skinparam handwritten false
+skinparam sequenceMessageAlign center
+skinparam participantPadding 10
+skinparam boxPadding 10
+
+box "GitLab 私有部署" #LightBlue
+  participant "开发负责人" as Lead #LightSkyBlue
+  participant "Git 仓库" as Git #Azure
+  participant "GitLab CI/CD" as CI #AliceBlue
+end box
+
+participant "部署服务器" as Server #LightGreen
+participant "Nginx" as Nginx #LightYellow
+participant "OSS" as OSS #LightCoral
+participant "飞书群" as Feishu #LightPink
+
+== Tag 触发部署 ==
+
+Lead -> Git: 1. 打 Tag 并推送\ngit tag v1.2.3\ngit push origin v1.2.3
+activate Git
+
+Git -> CI: 2. Tag Push 事件\n自动触发 Pipeline
+activate CI
+
+CI -> CI: 3. 验证 Tag 格式\n(/^v\d+\.\d+\.\d+$/)
+
+CI -> Git: 4. 拉取 Tag 代码
+activate Git
+Git --> CI: 5. 返回代码
+deactivate Git
+deactivate Git
+
+CI -> CI: 6. 执行构建\n(npm run build)
+
+== 部署阶段 ==
+
+CI -> Server: 7. SSH 连接并执行部署脚本
+activate Server
+note right of Server
+deploy.sh --env=production \\
+--tag=v1.2.3 \\
+--commit=abc123 \\
+--triggerer=李四
+end note
+
+Server -> Server: 8. 初始化部署环境
+Server -> Server: 9. 使用 Tag 作为版本号\n(v1.2.3)
+
+Server -> Git: 10. Clone 指定 Tag
+activate Git
+Git --> Server: 11. 返回代码
+deactivate Git
+
+Server -> Git: 12. 创建并切换到 cicd 分支\n(git checkout -b cicd-时间戳)
+activate Git
+Git --> Server: 13. 已切换到新分支
+deactivate Git
+
+Server -> Server: 14. 清理工作区\n(git clean -fd)
+Server -> Server: 15. 安装依赖 & 构建
+Server -> Server: 16. 生成版本元数据
+Server -> Server: 17. 更新 versions.json\n(在新分支上)
+Server -> Server: 18. 生成部署记录文件\n(.deploy-history)
+
+Server -> Server: 19. 部署应用\n(ln -sfn new current)
+
+par 异步上传 OSS & 继续部署
+    Server -> OSS: 20. 后台上传包\n(不阻塞主流程)
+    activate OSS
+    OSS --> OSS: 21. 上传中...
+    OSS --> Server: 上传完成
+    deactivate OSS
+else
+    Server -> Nginx: 22. nginx -s reload
+    activate Nginx
+    Nginx --> Server: 23. 重载完成
+    deactivate Nginx
+end
+
+note right
+  ⚡ OSS 上传与 Nginx 重载并行执行
+  不阻塞主部署流程
+end note
+
+== 健康检查（脚本） ==
+
+Server -> Server: 24. 执行健康检查脚本\n(最多n秒)
+
+alt 健康检查失败
+    Server -> Server: 25. 自动回滚\n(current -> previous)
+    Server -> Nginx: 26. nginx -s reload
+    Nginx --> Server: 27. 重载完成
+
+    Server -> Feishu: 28. 发送失败告警\n@李四
+    activate Feishu
+    Feishu --> Lead: 29. 收到告警通知
+    deactivate Feishu
+
+    Lead -> Server: 30. 手动触发回滚\n(如需要)
+
+else 健康检查成功
+    Server -> Server: 31. 清理旧版本\n(保留10个)
+
+    Server -> Git: 32. 提交部署记录\n(已在 cicd 分支上)
+    activate Git
+    Git --> Server: 33. 提交成功
+
+    Server -> Git: 34. 推送 cicd 分支到远程
+    Git --> Server: 35. 推送成功
+
+    Server -> Git: 36. 创建合并请求(MR)
+    Git --> Server: 37. MR 创建成功\nMR URL: https://...
+    deactivate Git
+
+    Server -> Feishu: 38. 发送通知\n包含 MR 链接 + 验证链接
+    activate Feishu
+    Feishu --> Lead: 39. 收到部署通知
+    deactivate Feishu
+end
+
+== 人工验证 ==
+
+Lead -> Git: 40. 点击 MR 链接查看
+activate Git
+Git --> Lead: 41. 显示部署记录
+deactivate Git
+
+Lead -> Nginx: 42. 点击链接访问验证
+activate Nginx
+Nginx --> Lead: 43. 返回页面
+deactivate Nginx
+
+alt 验证通过
+    Lead -> Git: 44. 合并 MR
+    activate Git
+    Git --> Server: 45. 触发分支清理
+    deactivate Git
+
+    Server -> Git: 46. checkout main & pull
+    activate Git
+    Git --> Server: 47. 已同步最新代码
+
+    Server -> Git: 48. 删除本地 & 远程 cicd 分支
+    Git --> Server: 49. 分支已清理
+    deactivate Git
+
+    Server -> Feishu: 50. 发送清理完成通知
+    activate Feishu
+    Feishu --> Lead: 51. ✅ 部署流程完成
+    deactivate Feishu
+
+else 验证失败
+    Lead -> Server: 52. 手动触发回滚\n./deploy.sh --rollback
+    activate Server
+    Server -> Server: 53. 执行回滚
+    Server -> Nginx: 54. nginx -s reload
+    Server -> Feishu: 55. 发送回滚通知
+    deactivate Server
+end
+
+deactivate Server
+deactivate CI
+
+note right of Lead
+  生产环境部署特点：
+  • Tag 自动触发
+  • 保留最近 10 个版本
+  • 健康检查超时 60 秒
+  • 更新部署历史记录
+  • 负责人验证把关
+end note
+
+@enduml

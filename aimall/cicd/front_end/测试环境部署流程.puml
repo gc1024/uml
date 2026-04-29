@@ -1,0 +1,134 @@
+@startuml
+!include <archimate/Archimate>
+
+title 测试环境 CICD 自动化部署流程
+
+skinparam backgroundColor #FEFEFE
+skinparam handwritten false
+skinparam sequenceMessageAlign center
+skinparam participantPadding 10
+skinparam boxPadding 10
+
+box "GitLab 私有部署" #LightBlue
+  participant "开发人员" as Dev #LightSkyBlue
+  participant "GitLab CI/CD" as CI #AliceBlue
+  participant "Git 仓库" as Git #Azure
+end box
+
+participant "部署服务器" as Server #LightGreen
+participant "Nginx" as Nginx #LightYellow
+participant "OSS" as OSS #LightCoral
+participant "飞书群" as Feishu #LightPink
+
+== 手动触发部署 ==
+
+Dev -> CI: 1. 在 Pipeline 页面\n点击 "Play" 按钮
+activate CI
+CI -> CI: 2. 验证分支权限
+
+CI -> Git: 3. 拉取代码 (develop/feature/*)
+activate Git
+Git --> CI: 4. 返回代码
+deactivate Git
+
+CI -> CI: 5. 执行构建\n(npm run build)
+
+== 部署阶段 ==
+
+CI -> Server: 6. SSH 连接并执行部署脚本
+activate Server
+note right of Server
+deploy.sh --env=test \\
+--branch=develop \\
+--commit=abc123 \\
+--triggerer=张三
+end note
+
+Server -> Server: 7. 初始化部署环境
+Server -> Server: 8. 生成版本号\n(app-20240429-163000)
+
+Server -> Git: 9. Clone 指定分支
+activate Git
+Git --> Server: 10. 返回代码
+deactivate Git
+
+Server -> Server: 11. 安装依赖 & 构建
+Server -> Server: 12. 生成版本元数据
+Server -> Server: 13. 更新 versions.json
+
+Server -> Server: 14. 部署应用\n(ln -sfn new current)
+
+par 异步上传 OSS & 继续部署
+    Server -> OSS: 15. 后台上传包\n(不阻塞主流程)
+    activate OSS
+    OSS --> OSS: 16. 上传中...
+    OSS --> Server: 上传完成
+    deactivate OSS
+else
+    Server -> Nginx: 17. nginx -s reload
+    activate Nginx
+    Nginx --> Server: 18. 重载完成
+    deactivate Nginx
+end
+
+note right
+  ⚡ OSS 上传与 Nginx 重载并行执行
+  不阻塞主部署流程
+end note
+
+== 健康检查（脚本） ==
+
+Server -> Server: 19. 执行健康检查脚本\n(最多n秒)
+
+alt 健康检查失败
+    Server -> Server: 20. 自动回滚\n(current -> previous)
+    Server -> Nginx: 21. nginx -s reload
+    Nginx --> Server: 22. 重载完成
+
+    Server -> Feishu: 23. 发送失败告警\n@张三
+    activate Feishu
+    Feishu --> Dev: 24. 收到告警通知
+    deactivate Feishu
+
+    Dev -> CI: 25. 检查问题
+    Dev -> Server: 26. 手动触发回滚\n(如需要)
+
+else 健康检查成功
+    Server -> Server: 27. 清理旧版本\n(保留3个)
+
+    Server -> Feishu: 28. 发送成功通知\n包含验证链接
+    activate Feishu
+    Feishu --> Dev: 29. 收到部署通知
+    deactivate Feishu
+end
+
+== 人工验证 ==
+
+Dev -> Nginx: 30. 点击链接访问验证
+activate Nginx
+Nginx --> Dev: 31. 返回页面
+deactivate Nginx
+
+alt 验证通过
+    Dev -> Dev: 32. ✅ 部署完成
+else 验证失败
+    Dev -> Server: 33. 手动触发回滚\n./deploy.sh --rollback
+    activate Server
+    Server -> Server: 34. 执行回滚
+    Server -> Nginx: 35. nginx -s reload
+    Server -> Feishu: 36. 发送回滚通知
+    deactivate Server
+end
+
+deactivate Server
+deactivate CI
+
+note right of Dev
+  测试环境部署特点：
+  • 手动触发部署
+  • 保留最近 3 个版本
+  • 健康检查超时 30 秒
+  • 支持手动回滚
+end note
+
+@enduml
