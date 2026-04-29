@@ -456,75 +456,18 @@ PlantUML 支持多种输出格式：
 5. 优先使用中文注释和说明
 6. 对于大型架构图，合理使用分组和颜色编码
 
-## Git 提交规范
+### Git 提交规范
 
-### 提交信息格式
+PlantUML 图表的 Git 提交请参考 `git.md` 技能文档。
 
-使用中文提交信息，遵循约定式提交（Conventional Commits）格式：
-
+**基本提交格式：**
 ```
 <类型>: <简短描述>
 
-<详细描述（可选）>
-
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 ```
 
-### 类型（Type）
-
-| 类型 | 说明 | 示例 |
-|------|------|------|
-| `feat` | 新功能（新图表、新组件等） | `feat: 添加前端架构组件图` |
-| `fix` | 修复错误（语法错误、显示问题等） | `fix: 修复序列图参与者显示问题` |
-| `docs` | 文档更新（README、注释等） | `docs: 更新 PlantUML 技能文档` |
-| `style` | 代码格式调整（不影响功能的样式修改） | `style: 统一图表配色方案` |
-| `refactor` | 重构（既不是新功能也不是修复） | `refactor: 优化类图结构` |
-| `perf` | 性能优化 | `perf: 优化图表渲染速度` |
-| `test` | 测试相关 | `test: 添加图表验证脚本` |
-| `chore` | 构建过程或辅助工具变动 | `chore: 更新 .gitignore 配置` |
-
-### 提交示例
-
-**新功能：**
-```
-feat: 添加前端架构组件图
-
-- 添加 React 组件关系图
-- 添加状态管理流程图
-
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
-```
-
-**修复：**
-```
-fix: 修复序列图参与者显示问题
-
-调整 participant 声明顺序以正确显示
-
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
-```
-
-**文档：**
-```
-docs: 更新 PlantUML 技能文档
-
-添加思维导图和甘特图的语法说明
-
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
-```
-
-### Git 工作流程
-
-1. **添加文件**：`git add <文件>`
-2. **提交更改**：使用上述格式的提交信息
-3. **推送远程**：`git push`
-4. **修改提交**：如需修改最后一次提交，使用 `git commit --amend`
-5. **强制推送**：修改历史后需要 `git push --force-with-lease`
-
-### 注意事项
-
-- 每次提交应包含 `Co-Authored-By` 署名
-- 提交信息使用中文
-- 简短描述不超过 50 字符
-- 详细描述（如有）说明为什么做这个改动
-- 一个提交只做一件事
+**常用类型：**
+- `feat` - 新图表或新组件
+- `fix` - 修复语法或显示问题
+- `docs` - 更新图表注释或说明
